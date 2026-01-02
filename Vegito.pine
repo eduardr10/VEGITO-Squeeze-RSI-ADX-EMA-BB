@@ -2,107 +2,74 @@
 indicator("Vegito", overlay=false, precision=2)
 
 // ==========================================
-// --- CONFIGURACIÓN DE ESTILOS Y COLORES ---
+// --- CONFIGURACIÓN VISUAL ---
 // ==========================================
 gp_style_bb  = "🎨 Estilo: Bandas Bollinger"
 show_bb      = input.bool(true, "Mostrar BB (Precio)", group=gp_style_bb)
 col_bb       = input.color(color.new(#2196f3, 40), "Color Bandas", group=gp_style_bb)
-width_bb     = input.int(2, "Grosor Línea BB", minval=1, group=gp_style_bb)
 
 gp_style_ema = "🎨 Estilo: EMA 50"
 show_ema     = input.bool(true, "Mostrar EMA (Precio)", group=gp_style_ema)
 col_ema      = input.color(color.gray, "Color EMA", group=gp_style_ema)
-width_ema    = input.int(2, "Grosor EMA", minval=1, group=gp_style_ema)
+
+gp_style_sqz = "🎨 Estilo: Squeeze"
+show_sqz_h   = input.bool(true, "Mostrar Histograma Squeeze", group=gp_style_sqz)
+show_sqz_dot = input.bool(true, "Mostrar Puntos Squeeze", group=gp_style_sqz)
 
 gp_style_rsi = "🎨 Estilo: RSI"
 show_rsi     = input.bool(true, "Mostrar RSI", group=gp_style_rsi)
 col_rsi      = input.color(color.black, "Color Línea RSI", group=gp_style_rsi)
-col_rsi_up   = input.color(color.red, "Color Sobrecompra (70)", group=gp_style_rsi)
-col_rsi_dw   = input.color(color.green, "Color Sobreventa (30)", group=gp_style_rsi)
-rsi_style_in = input.string("Dotted", "Estilo Líneas RSI", options=["Solid", "Dotted", "Dashed"], group=gp_style_rsi)
 
 gp_style_adx = "🎨 Estilo: ADX"
 show_adx     = input.bool(true, "Mostrar ADX", group=gp_style_adx)
 col_adx      = input.color(color.purple, "Color ADX", group=gp_style_adx)
-width_adx    = input.int(2, "Grosor ADX", group=gp_style_adx)
 
-gp_style_sqz = "🎨 Estilo: Squeeze"
-show_sqz_h   = input.bool(true, "Mostrar Histograma", group=gp_style_sqz)
-show_sqz_dot = input.bool(false, "Mostrar Puntos Squeeze (Nivel 50)", group=gp_style_sqz) 
-
-gp_tooltip   = "📊 Compacto de Datos (Tooltip)"
-show_tooltip = input.bool(true, "Activar Etiqueta de Resumen", group=gp_tooltip)
-col_tool     = input.color(color.new(#ff9800, 20), "Color de la Marca", group=gp_tooltip)
-
-// --- Traducción de Estilos ---
-chosen_rsi_style = switch rsi_style_in
-    "Solid"  => hline.style_solid
-    "Dotted" => hline.style_dotted
-    "Dashed" => hline.style_dashed
-    => hline.style_dotted
+gp_tooltip   = "📊 Análisis de Datos (Tooltip)"
+show_tooltip = input.bool(true, "Activar Tooltip de Análisis", group=gp_tooltip)
+tooltip_freq = input.int(50, "Frecuencia de Análisis (Velas)", minval=10, group=gp_tooltip)
+col_tool     = input.color(color.new(#ff9800, 20), "Color Icono Análisis", group=gp_tooltip)
 
 // ==========================================
-// --- PARÁMETROS TÉCNICOS ---
+// --- MOTOR TÉCNICO ---
 // ==========================================
-gp_ind   = "⚙️ Parámetros Técnicos"
-sens_mode = input.string("Estándar", "Modo de Sensibilidad", options=["Estándar", "Sensible"], group=gp_ind)
+ema_v = ta.ema(close, 50)
+[bb_basis, bb_upper, bb_lower] = ta.bb(close, 20, 2.0)
 
-ema_len  = input.int(50, "Periodo EMA", 1, 500, group=gp_ind)
-sqz_len  = input.int(20, "Periodo Squeeze", 10, 50, group=gp_ind)
-bb_len   = input.int(20, "Periodo BB", 1, 200, group=gp_ind)
-bb_mult  = input.float(2.0, "Multiplicador BB", 0.1, 5.0, step=0.1, group=gp_ind)
+// Squeeze Momentum
+sqz_val = ta.linreg(close - math.avg(math.avg(ta.highest(high, 20), ta.lowest(low, 20)), ta.sma(close, 20)), 20, 0)
+sq_up = ta.rising(sqz_val, 1), sq_dn = ta.falling(sqz_val, 1)
+is_sqz_on = (bb_upper < ta.sma(close, 20) + ta.sma(ta.tr, 20) * 1.5) and (bb_lower > ta.sma(close, 20) - ta.sma(ta.tr, 20) * 1.5)
 
-rsi_len = sens_mode == "Sensible" ? 7 : 14
-ad_threshold = sens_mode == "Sensible" ? 14 : 20
-
-// ==========================================
-// --- CÁLCULOS TÉCNICOS ---
-// ==========================================
-ema_v = ta.ema(close, ema_len)
-[bb_basis, bb_upper, bb_lower] = ta.bb(close, bb_len, bb_mult)
-kc_basis = ta.sma(close, sqz_len)
-kc_range = ta.sma(ta.tr, sqz_len)
-is_sqz_on = (bb_upper < kc_basis + kc_range * 1.5) and (bb_lower > kc_basis - kc_range * 1.5)
-
-rsi_v = ta.rsi(close, rsi_len)
+rsi_v = ta.rsi(close, 14)
 [_, _, adx_v] = ta.dmi(14, 14)
-
-sqz_highest = ta.highest(high, sqz_len)
-sqz_lowest  = ta.lowest(low, sqz_len)
-sqz_val = ta.linreg(close - math.avg(math.avg(sqz_highest, sqz_lowest), ta.sma(close, sqz_len)), sqz_len, 0)
-sq_up = ta.rising(sqz_val, 1)
-sq_dn = ta.falling(sqz_val, 1)
-
-// --- Lógica Predictiva (REFERENCIA 50 VELAS) ---
-lookback_50 = 50
-bull_count = math.sum(close > ema_v ? 1 : 0, lookback_50)
-trend_dominance = (bull_count / lookback_50) * 100
-
-// NUEVO: Rango basado en el Máximo y Mínimo real de las últimas 50 velas
-range_max_50 = ta.highest(high, lookback_50)
-range_min_50 = ta.lowest(low, lookback_50)
+vol_avg = ta.sma(volume, 20)
 
 // ==========================================
-// --- LÓGICA DEL TOOLTIP COMPACTO ---
+// --- LÓGICA DE TOOLTIP ÚNICO ---
 // ==========================================
-if show_tooltip and barstate.islast
-    var label compacto = label.new(bar_index, high, text="👁️", color=col_tool, textcolor=color.white, style=label.style_label_down, size=size.small, force_overlay=true)
+var label last_label = na
+is_step_bar = bar_index % tooltip_freq == 0
+should_show = show_tooltip and (is_step_bar or barstate.islast)
+
+if should_show
+    if barstate.islast and not is_step_bar
+        label.delete(last_label)
+
+    lbl = label.new(bar_index, high, "👁️", color=col_tool, textcolor=color.black, style=label.style_label_down, size=size.small, force_overlay=true)
     
-    txt = "📋 VEGITO (" + sens_mode + ")\n"
+    txt = "🧠 ANÁLISIS VEGITO\n"
     txt += "-------------------------\n"
-    txt += "RSI: " + str.tostring(rsi_v, "#.##") + " | ADX: " + str.tostring(adx_v, "#.##") + (adx_v > ad_threshold ? " ✅" : " ❌") + "\n"
-    txt += "Squeeze: " + (is_sqz_on ? "Compresión 🔒" : "Liberado 🚀") + "\n"
-    txt += "Momentum: " + (sqz_val > 0 ? (sq_up ? "Ascenso ▲" : "Agotamiento △") : (sq_dn ? "Descenso ▼" : "Frenado ▽")) + "\n"
+    txt += "RSI: " + str.tostring(rsi_v, "#.#") + "\n"
+    txt += "ADX: " + str.tostring(adx_v, "#.#") + "\n"
+    txt += "Squeeze: " + (sqz_val > 0 ? "BULL" : "BEAR") + (sq_up ? " ↗️" : " ↘️") + "\n"
+    txt += "Volumen: " + (volume > vol_avg ? "ALTO ✅" : "Normal") + "\n"
     txt += "-------------------------\n"
-    txt += "ANÁLISIS ÚLTIMAS 50 VELAS:\n"
-    txt += "Dominancia Alcista: " + str.tostring(trend_dominance, "#") + "%\n"
-    txt += "Rango Máximo: " + str.tostring(range_max_50, "#.##") + "\n"
-    txt += "Rango Mínimo: " + str.tostring(range_min_50, "#.##") + "\n"
-    txt += "-------------------------\n"
-    txt += "Posición en Rango: " + str.tostring(((close - range_min_50) / (range_max_50 - range_min_50)) * 100, "#") + "% del canal"
+    txt += "EMA 50: " + (close > ema_v ? "Por encima" : "Por debajo") + "\n"
+    txt += "BB: " + (close > bb_upper ? "Exceso Alcista" : close < bb_lower ? "Exceso Bajista" : "Dentro de Rango")
     
-    label.set_xy(compacto, bar_index, high)
-    label.set_tooltip(compacto, txt)
+    label.set_tooltip(lbl, txt)
+    if barstate.islast
+        last_label := lbl
 
 // ==========================================
 // --- VISUALIZACIÓN PANEL INFERIOR ---
@@ -111,17 +78,15 @@ sq_max = ta.highest(math.abs(sqz_val), 100)
 sq_norm = (sq_max == 0 ? 0 : (sqz_val / sq_max) * 25) + 50
 sq_col = sqz_val > 0 ? (sq_up ? #00ff00 : #006400) : (sq_dn ? #ff0000 : #8b0000)
 
-plot(show_sqz_h ? sq_norm : na, "Squeeze Momentum", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
-plot(show_rsi ? rsi_v : na, "RSI", color=col_rsi, linewidth=1)
-plot(show_adx ? adx_v : na, "ADX Fuerza", color=col_adx, linewidth=width_adx)
-plot(show_sqz_dot ? 50 : na, "Puntos Squeeze", color=is_sqz_on ? color.red : color.green, style=plot.style_circles, linewidth=2)
+plot(show_sqz_h ? sq_norm : na, "Squeeze", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
+plot(show_rsi ? rsi_v : na, "RSI", color=col_rsi)
+plot(show_adx ? adx_v : na, "ADX", color=col_adx, linewidth=2)
+plot(show_sqz_dot ? 50 : na, "SQZ Dot", color=is_sqz_on ? color.red : color.green, style=plot.style_circles, linewidth=2)
 
-hline(70, "Sobrecompra", color=col_rsi_up, linestyle=chosen_rsi_style)
-hline(30, "Sobreventa", color=col_rsi_dw, linestyle=chosen_rsi_style)
-hline(ad_threshold, "Umbral ADX", color=color.new(col_adx, 60), linestyle=hline.style_solid)
-hline(50, "Neutral", color=color.new(color.white, 80))
+hline(70, "OB", color=color.new(color.red, 50), linestyle=hline.style_dotted)
+hline(30, "OS", color=color.new(color.green, 50), linestyle=hline.style_dotted)
 
-// --- OVERLAY ---
-plot(show_bb ? bb_upper : na, "BB Superior", color=col_bb, linewidth=width_bb, force_overlay=true)
-plot(show_bb ? bb_lower : na, "BB Inferior", color=col_bb, linewidth=width_bb, force_overlay=true)
-plot(show_ema ? ema_v : na, "EMA 50", color=col_ema, linewidth=width_ema, force_overlay=true)
+// Overlay Precio
+plot(show_bb ? bb_upper : na, "BB Upper", color=col_bb, force_overlay=true)
+plot(show_bb ? bb_lower : na, "BB Lower", color=col_bb, force_overlay=true)
+plot(show_ema ? ema_v : na, "EMA 50", color=col_ema, force_overlay=true)
