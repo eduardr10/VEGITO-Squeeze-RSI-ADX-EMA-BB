@@ -1,8 +1,8 @@
 //@version=6
-indicator("VEGITO [Full-Precision + Matrix Control] V16", shorttitle="VEGITO+ MAX", overlay=false, precision=2)
+indicator("VEGITO [Full-Precision + Matrix Control] V17", shorttitle="VEGITO+ MAX", overlay=false, precision=2)
 
 // ==========================================
-// 1. CONFIGURACIÓN VISUAL Y DE ENTRADAS
+// 1. CONFIGURACIÓN VISUAL Y DE ENTRADAS (SIN CAMBIOS)
 // ==========================================
 gp_style_bb  = "🎨 Estilo: Bandas Bollinger"
 show_bb      = input.bool(true, "Mostrar BB (Precio)", group=gp_style_bb)
@@ -100,40 +100,61 @@ plot(show_rsi and show_rsi_signal ? ta.sma(rsi_v, 3) : na, "RSI Signal", color=r
 plot(show_adx ? adx_v : na, "ADX", color=adx_color, linewidth=adx_width)
 
 // ==========================================
-// 4. OVERLAY EN PRECIO Y TOOLTIPS (CORREGIDO)
+// 4. OVERLAY EN PRECIO Y TOOLTIPS (ANÁLISIS MEJORADO)
 // ==========================================
 plot(show_bb ? bb_u : na, "BB Upper", color=color.new(col_bb, vol_v ? 20 : 40), linewidth=bb_width, force_overlay=true)
 plot(show_bb ? bb_l_band : na, "BB Lower", color=color.new(col_bb, vol_v ? 20 : 40), linewidth=bb_width, force_overlay=true)
 plot(show_ema ? ma1_v : na, "MA1", color=color.new(col_ema, vol_v ? 40 : 80), linewidth=ma1_width, force_overlay=true)
 plot(show_ma2 ? ma2_v : na, "MA2", color=ma2_color, linewidth=ma2_width, force_overlay=true)
 
-// Lógica de Labels para evitar el error de acumulación
 var label last_diagnostic_label = na
 
 if show_labels
     is_step = bar_index % tooltip_freq == 0
-    
     if is_step or barstate.islast
-        // Si es la última vela, borramos la anterior "flotante" para que no se acumulen
         if barstate.islast
             label.delete(last_diagnostic_label)
             
-        txt = "🎯 DIAGNÓSTICO VEGITO+\nESTRUCTURA: " + (close > ma1_v ? "ALCISTA" : "BAJISTA") + "\nSQUEEZE: " + (sqz_v > 0 ? "🟢" : "🔴") + "\nVOL: " + (vol_v ? "ALTA" : "NORMAL") + "\n\nSITUACIÓN 1D:\n• RSI: " + str.tostring(r1d, "#.0") + "\n• ADX: " + str.tostring(a1d, "#.0")
+        // --- LÓGICA DE ANÁLISIS ---
+        string t_trend = close > ma1_v ? "ALCISTA" : "BAJISTA"
+        string t_power = adx_v > 25 ? "CON FUERZA" : "DÉBIL/RANGO"
+        string t_sqz   = sqz_v > 0 ? (sq_is_rising ? "IMPULSO 🟢" : "AGOTAMIENTO 🟢") : (sq_is_falling ? "IMPULSO 🔴" : "AGOTAMIENTO 🔴")
+        
+        // Resumen simplificado
+        string t_summary = ""
+        if (t_trend == "ALCISTA" and sqz_v > 0 and adx_v > 20)
+            t_summary := "Continuidad de compra"
+        else if (t_trend == "BAJISTA" and sqz_v < 0 and adx_v > 20)
+            t_summary := "Presión de venta activa"
+        else if (adx_v < 18)
+            t_summary := "Acumulación / Lateral"
+        else
+            t_summary := "Posible reversión o duda"
+
+        txt = "🎯 ANÁLISIS VEGITO+\n" +
+              "══════════════════════════\n" +
+              "ESTADO: " + t_trend + " " + t_power + "\n" +
+              "MOMENTUM: " + t_sqz + "\n" +
+              "RESUMEN: " + t_summary + "\n" +
+              "══════════════════════════\n" +
+              "PRECISIÓN MTF:\n" +
+              "• 1D RSI: " + str.tostring(r1d, "#.0") + (r1d > 70 ? " (S.Compra)" : r1d < 30 ? " (S.Venta)" : "") + "\n" +
+              "• 1D ADX: " + str.tostring(a1d, "#.0") + "\n" +
+              "• Dist. EMA: " + str.tostring(dist_v, "#.##") + "%"
         
         new_lbl = label.new(bar_index, high, vol_v ? "⚡" : "👁️", 
                   yloc=yloc.abovebar, 
-                  color=color.new(color.blue, 40), 
+                  color=vol_v ? color.new(color.orange, 30) : color.new(color.blue, 40), 
                   style=label.style_label_down, 
                   size=size.small, 
                   force_overlay=true, 
                   tooltip=txt)
         
-        // Guardamos la referencia si es la última para poder borrarla en el siguiente tick
         if barstate.islast
             last_diagnostic_label := new_lbl
 
 // ==========================================
-// 5. TABLA MTF INTEGRAL
+// 5. TABLA MTF INTEGRAL (SIN CAMBIOS)
 // ==========================================
 f_table_row(_tbl, _row, _tf, _r, _a, _d, _s, _v) =>
     bg = _v and use_vol_filter ? color.new(color.orange, 30) : color.new(color.black, 70)
