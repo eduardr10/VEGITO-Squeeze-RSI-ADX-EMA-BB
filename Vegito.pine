@@ -1,8 +1,8 @@
 //@version=6
-indicator("VEGITO", overlay=false, precision=2)
+indicator("VEGITO [Optimized+Precision]", shorttitle="VEGITO+", overlay=false, precision=2)
 
 // ==========================================
-// --- CONFIGURACIÓN VISUAL ---
+// 1. CONFIGURACIÓN VISUAL (OPTIMIZADA)
 // ==========================================
 gp_style_bb  = "🎨 Estilo: Bandas Bollinger"
 show_bb      = input.bool(true, "Mostrar BB (Precio)", group=gp_style_bb)
@@ -14,116 +14,233 @@ col_ema      = input.color(#FFD700, "Color EMA", group=gp_style_ema)
 
 gp_panel     = "🖥️ Panel de Confluencia (MTF)"
 show_panel   = input.bool(true, "Mostrar Panel en Precio", group=gp_panel)
-pos_panel    = input.string("Top Right", "Posición", options=["Top Right", "Bottom Right", "Top Left"], group=gp_panel)
+pos_panel    = input.string("Top Right", "Posición", options=["Top Right", "Bottom Right", "Top Left", "Bottom Left"], group=gp_panel)
 
 gp_tooltip   = "📊 Configuración Tooltip"
-tooltip_freq = input.int(50, "Frecuencia de Ojos Históricos", minval=10)
+tooltip_freq = input.int(50, "Frecuencia de Ojos Históricos", minval=10, group=gp_tooltip)
+
+// NUEVO: Filtro de volatilidad para mayor precisión
+gp_precision = "🎯 Precisión Mejorada"
+use_vol_filter = input.bool(true, "Usar Filtro de Volatilidad", group=gp_precision)
+vol_period = input.int(20, "Periodo Volatilidad", minval=10, maxval=50, group=gp_precision)
+vol_threshold = input.float(1.5, "Umbral Volatilidad (%)", minval=0.5, maxval=5, step=0.1, group=gp_precision)
 
 // ==========================================
-// --- MOTOR TÉCNICO LOCAL ---
+// 2. FUNCIONES DE CÁLCULO (OPTIMIZADAS CON PRECISIÓN)
 // ==========================================
-ema_v = ta.ema(close, 50)
-[bb_basis, bb_upper, bb_lower] = ta.bb(close, 20, 2.0)
-rsi_v = ta.rsi(close, 14)
-[_, _, adx_v] = ta.dmi(14, 14)
+// MEJORA: Función única para cálculo más preciso
+f_calc_metrics() =>
+    // Definiciones optimizadas
+    _c = close
+    _h = high
+    _l = low
+    
+    // 1. Indicadores básicos (optimizados)
+    _ema = ta.ema(_c, 50)
+    _dist = (_ema != 0 ? ((_c - _ema) / math.abs(_ema)) * 100 : 0)  // MEJORA: Evita división por 0
+    
+    // MEJORA: RSI con suavizado adicional para mayor precisión
+    _rsi_raw = ta.rsi(_c, 14)
+    _rsi = (_rsi_raw + ta.rsi(_c, 10)) / 2  // Promedio para reducir falsos
+    
+    // MEJORA: ADX con filtro de ruido
+    [_, _, _adx_raw] = ta.dmi(14, 14)
+    _adx = ta.sma(_adx_raw, 3)  // Suavizado para mayor precisión
+    
+    // Bandas Bollinger
+    [_bb_mid, _bb_u, _bb_l] = ta.bb(_c, 20, 2.0)
+    
+    // 2. Squeeze (EXACTA tu fórmula - no modificada)
+    _h20 = ta.highest(_h, 20)
+    _l20 = ta.lowest(_l, 20)
+    _a20 = ta.sma(_c, 20)
+    _avg = (math.avg(_h20, _l20) + _a20) / 2
+    _sqz = ta.linreg(_c - _avg, 20, 0)
+    
+    // NUEVO: Cálculo de volatilidad para filtro de precisión
+    _atr = ta.atr(14)
+    _atr_percent = (_c != 0 ? (_atr / _c) * 100 : 0)
+    _vol_high = _atr_percent > vol_threshold
+    
+    // Retornamos todo el paquete de datos
+    [_rsi, _adx, _dist, _sqz, _ema, _bb_u, _bb_l, _vol_high]
 
-// Squeeze Local (Cálculo directo sin =>)
-h20 = ta.highest(high, 20)
-l20 = ta.lowest(low, 20)
-a20 = ta.sma(close, 20)
-sqz_now = ta.linreg(close - math.avg(math.avg(h20, l20), a20), 20, 0)
+// Función para dibujar filas en la tabla (Optimizada)
+f_table_row(_tbl, _row, _tf, _r, _a, _d, _s, _vol_filter) =>
+    c_bg = color.new(color.black, 70)
+    c_tx = color.white
+    
+    // MEJORA: Color de fondo basado en volatilidad
+    bg_color = _vol_filter and use_vol_filter ? color.new(color.orange, 30) : c_bg
+    
+    // TF
+    table.cell(_tbl, 0, _row, _tf, bgcolor=bg_color, text_color=c_tx)
+    
+    // RSI con mayor precisión visual
+    c_rsi = _r > 70 ? color.new(color.red, 40) : _r < 30 ? color.new(color.green, 40) : bg_color
+    rsi_text = str.tostring(_r, "#.0")  // MEJORA: Un decimal para mayor precisión
+    table.cell(_tbl, 1, _row, rsi_text, bgcolor=c_rsi, text_color=c_tx)
+    
+    // ADX con indicador visual mejorado
+    c_adx = _a > 25 ? color.new(color.purple, 60) : bg_color
+    adx_text = str.tostring(_a, "#.0")  // MEJORA: Un decimal
+    table.cell(_tbl, 2, _row, adx_text, bgcolor=c_adx, text_color=c_tx)
+    
+    // Distancia con color basado en magnitud
+    d_sign = _d > 0 ? "+" : ""
+    d_color = math.abs(_d) > 2 ? color.new(_d > 0 ? color.green : color.red, 20) : bg_color
+    dist_text = d_sign + str.tostring(_d, "#.##") + "%"
+    table.cell(_tbl, 3, _row, dist_text, bgcolor=d_color, text_color=c_tx)
+    
+    // Squeeze (visual original preservado)
+    sym_s = _s > 0 ? "🟢" : "🔴"
+    table.cell(_tbl, 4, _row, sym_s, bgcolor=bg_color, text_color=c_tx)
+
+// ==========================================
+// 3. OBTENCIÓN DE DATOS (OPTIMIZADA)
+// ==========================================
+// Datos Actuales
+[rsi_v, adx_v, dist_v, sqz_now, ema_v, bb_upper, bb_lower, vol_high] = f_calc_metrics()
+
+// MEJORA: Cálculo MTF optimizado
+get_mtf_data(tf) =>
+    [r, a, d, s, e, bu, bl, v] = request.security(syminfo.tickerid, tf, f_calc_metrics())
+    [r, a, d, s, v]
+
+// Datos MTF (optimizado)
+[rsi_1h, adx_1h, dist_1h, sqz_1h, vol_1h] = get_mtf_data("60")
+[rsi_4h, adx_4h, dist_4h, sqz_4h, vol_4h] = get_mtf_data("240")
+[rsi_1d, adx_1d, dist_1d, sqz_1d, vol_1d] = get_mtf_data("D")
+
+// ==========================================
+// 4. VISUALIZACIÓN PANEL INFERIOR (MEJORADA)
+// ==========================================
+// Squeeze Visual (CORRECCIÓN: Extraer ta.falling fuera del operador ternario)
 sq_up = ta.rising(sqz_now, 1)
-dist_val = ((close - ema_v) / ema_v) * 100
+sq_down = ta.falling(sqz_now, 1)  // Extraído aquí para consistencia
+
+sq_max = ta.highest(math.abs(sqz_now), 100)
+sq_norm = (sq_max == 0 ? 0 : (sqz_now / sq_max) * 25) + 50
+
+// CORRECCIÓN: Usar variable precalculada sq_down
+sq_col = sqz_now > 0 ? (sq_up ? #00ff00 : #006400) : (sq_down ? #ff0000 : #8b0000)
+
+// MEJORA: Añadir línea de tendencia al squeeze
+plot(sq_norm, "Squeeze", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
+plot(ta.sma(sq_norm, 5), "Squeeze MA", color=color.new(sq_col, 70), linewidth=1)
+
+// RSI con línea de señal mejorada
+rsi_signal = ta.sma(rsi_v, 3)
+plot(rsi_v, "RSI", color=color.black)
+plot(rsi_signal, "RSI Signal", color=color.new(color.gray, 70), linewidth=1)
+
+// ADX con visualización mejorada
+plot(adx_v, "ADX", color=color.purple, linewidth=2)
+hline(25, "ADX Threshold", color=color.new(color.purple, 30), linestyle=hline.style_dotted)
+
+// Líneas de referencia
+hline(70, "OB", color=color.new(color.red, 50), linestyle=hline.style_dotted)
+hline(30, "OS", color=color.new(color.green, 50), linestyle=hline.style_dotted)
 
 // ==========================================
-// --- DATOS MULTITEMPORALES (MTF) ---
+// 5. VISUALIZACIÓN OVERLAY (CON FILTRO VOL)
 // ==========================================
-// 1 HORA
-rsi_1h  = request.security(syminfo.tickerid, "60", ta.rsi(close, 14))
-adx_1h  = request.security(syminfo.tickerid, "60", adx_v)
-dist_1h = request.security(syminfo.tickerid, "60", ((close - ta.ema(close, 50)) / ta.ema(close, 50)) * 100)
-sqz_1h  = request.security(syminfo.tickerid, "60", ta.linreg(close - math.avg(math.avg(ta.highest(high, 20), ta.lowest(low, 20)), ta.sma(close, 20)), 20, 0))
+// MEJORA: Transparencia basada en volatilidad
+bb_alpha = use_vol_filter and vol_high ? 20 : 40
+ema_alpha = use_vol_filter and vol_high ? 40 : 80
 
-// 4 HORAS
-rsi_4h  = request.security(syminfo.tickerid, "240", ta.rsi(close, 14))
-adx_4h  = request.security(syminfo.tickerid, "240", adx_v)
-dist_4h = request.security(syminfo.tickerid, "240", ((close - ta.ema(close, 50)) / ta.ema(close, 50)) * 100)
-sqz_4h  = request.security(syminfo.tickerid, "240", ta.linreg(close - math.avg(math.avg(ta.highest(high, 20), ta.lowest(low, 20)), ta.sma(close, 20)), 20, 0))
-
-// DIARIO
-rsi_1d  = request.security(syminfo.tickerid, "D", ta.rsi(close, 14))
-adx_1d  = request.security(syminfo.tickerid, "D", adx_v)
-dist_1d = request.security(syminfo.tickerid, "D", ((close - ta.ema(close, 50)) / ta.ema(close, 50)) * 100)
-sqz_1d  = request.security(syminfo.tickerid, "D", ta.linreg(close - math.avg(math.avg(ta.highest(high, 20), ta.lowest(low, 20)), ta.sma(close, 20)), 20, 0))
+plot(show_bb ? bb_upper : na, "BB Upper", color=color.new(col_bb, bb_alpha), force_overlay=true)
+plot(show_bb ? bb_lower : na, "BB Lower", color=color.new(col_bb, bb_alpha), force_overlay=true)
+plot(show_ema ? ema_v : na, "EMA 50", color=color.new(col_ema, ema_alpha), linewidth=2, force_overlay=true)
 
 // ==========================================
-// --- CONTROL DE ETIQUETAS (OJOS) ---
+// 6. ETIQUETAS MEJORADAS (CON FILTRO VOL)
 // ==========================================
 var label last_label = na
-if barstate.islast
+if barstate.islast and not na(last_label)
     label.delete(last_label)
 
 is_step_bar = bar_index % tooltip_freq == 0
+
 if is_step_bar or barstate.islast
-    txt = "📊 DIAGNÓSTICO VEGITO\n-------------------------\n"
-    txt += "ESTRUCTURA: " + (close > ema_v ? "ALCISTA" : "BAJISTA") + "\n"
-    txt += "FUERZA ADX: " + (adx_v > 25 ? "FUERTE" : "DÉBIL") + "\n"
-    txt += "SQUEEZE: " + (sqz_now > 0 ? "Momentum 🟢" : "Momentum 🔴") + "\n-------------------------\n"
-    txt += "SITUACIÓN 1D:\nRSI: " + str.tostring(rsi_1d, "#") + " | Dist: " + str.tostring(dist_1d, "#.##") + "%"
+    // MEJORA: Información más detallada
+    estructura = close > ema_v ? "ALCISTA" : "BAJISTA"
+    fuerza_adx = adx_v > 25 ? "FUERTE" : "DÉBIL"
+    squeeze_dir = sqz_now > 0 ? "Momentum 🟢" : "Momentum 🔴"
+    vol_status = vol_high ? "ALTA VOL" : "VOL NORMAL"
     
-    lbl = label.new(bar_index, high, "👁️", yloc=yloc.abovebar, color=color.new(#ff9800, 20), style=label.style_label_down, size=size.small, force_overlay=true, tooltip=txt)
+    // CORRECCIÓN: Eliminar string.repeat() que no existe en Pine Script
+    txt = "🎯 DIAGNÓSTICO VEGITO+\n═════════════════════════\n"
+    txt += "ESTRUCTURA: " + estructura + "\n"
+    txt += "FUERZA ADX: " + fuerza_adx + " (" + str.tostring(adx_v, "#.0") + ")\n"
+    txt += "SQUEEZE: " + squeeze_dir + "\n"
+    txt += "VOLATILIDAD: " + vol_status + "\n"
+    txt += "═════════════════════════\n"
+    txt += "SITUACIÓN 1D:\n"
+    txt += "• RSI: " + str.tostring(rsi_1d, "#.0") + "\n"
+    txt += "• Dist EMA: " + str.tostring(dist_1d, "#.##") + "%\n"
+    txt += "• ADX: " + str.tostring(adx_1d, "#.0")
+    
+    lbl_color = vol_high and use_vol_filter ? color.new(#FF6B00, 40) : color.new(#2196F3, 20)
+    
+    lbl = label.new(bar_index, high, vol_high ? "⚡" : "👁️", 
+          yloc=yloc.abovebar, 
+          color=lbl_color, 
+          style=label.style_label_down, 
+          size=size.small, 
+          force_overlay=true, 
+          tooltip=txt)
+    
     if barstate.islast
         last_label := lbl
 
 // ==========================================
-// --- TABLA MTF INTEGRAL ---
+// 7. TABLA MTF MEJORADA (CON VOLATILIDAD)
 // ==========================================
-if show_panel and barstate.islast
-    var table mtf_table = table.new(pos_panel == "Top Right" ? position.top_right : pos_panel == "Bottom Right" ? position.bottom_right : position.top_left, 5, 4, border_width=1, frame_color=color.gray, border_color=color.gray, force_overlay=true)
-    h_col = color.new(color.gray, 20)
+// Mapeo de posición
+var pos_tbl = position.top_right
+if pos_panel == "Top Left"
+    pos_tbl := position.top_left
+else if pos_panel == "Bottom Right"
+    pos_tbl := position.bottom_right
+else if pos_panel == "Bottom Left"
+    pos_tbl := position.bottom_left
+
+if show_panel
+    var table mtf_table = table.new(pos_tbl, 5, 4, 
+          border_width=1, 
+          frame_color=color.gray, 
+          border_color=color.gray,
+          force_overlay=true)
     
-    // Encabezados
-    table.cell(mtf_table, 0, 0, "TF", bgcolor=h_col, text_color=color.white)
-    table.cell(mtf_table, 1, 0, "RSI", bgcolor=h_col, text_color=color.white)
-    table.cell(mtf_table, 2, 0, "ADX", bgcolor=h_col, text_color=color.white)
-    table.cell(mtf_table, 3, 0, "Dist. EMA", bgcolor=h_col, text_color=color.white)
-    table.cell(mtf_table, 4, 0, "SQUEEZE", bgcolor=h_col, text_color=color.white)
-    
-    // Fila 1H
-    table.cell(mtf_table, 0, 1, "1H", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 1, 1, str.tostring(rsi_1h, "#"), bgcolor=rsi_1h > 70 ? color.new(color.red, 40) : rsi_1h < 30 ? color.new(color.green, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 2, 1, str.tostring(adx_1h, "#"), bgcolor=adx_1h > 25 ? color.new(color.purple, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 3, 1, (dist_1h > 0 ? "+" : "") + str.tostring(dist_1h, "#.##") + "%", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 4, 1, sqz_1h > 0 ? "🟢" : "🔴", bgcolor=color.new(color.black, 70), text_color=color.white)
-
-    // Fila 4H
-    table.cell(mtf_table, 0, 2, "4H", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 1, 2, str.tostring(rsi_4h, "#"), bgcolor=rsi_4h > 70 ? color.new(color.red, 40) : rsi_4h < 30 ? color.new(color.green, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 2, 2, str.tostring(adx_4h, "#"), bgcolor=adx_4h > 25 ? color.new(color.purple, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 3, 2, (dist_4h > 0 ? "+" : "") + str.tostring(dist_4h, "#.##") + "%", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 4, 2, sqz_4h > 0 ? "🟢" : "🔴", bgcolor=color.new(color.black, 70), text_color=color.white)
-
-    // Fila 1D
-    table.cell(mtf_table, 0, 3, "1D", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 1, 3, str.tostring(rsi_1d, "#"), bgcolor=rsi_1d > 70 ? color.new(color.red, 40) : rsi_1d < 30 ? color.new(color.green, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 2, 3, str.tostring(adx_1d, "#"), bgcolor=adx_1d > 25 ? color.new(color.purple, 40) : color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 3, 3, (dist_1d > 0 ? "+" : "") + str.tostring(dist_1d, "#.##") + "%", bgcolor=color.new(color.black, 70), text_color=color.white)
-    table.cell(mtf_table, 4, 3, sqz_1d > 0 ? "🟢" : "🔴", bgcolor=color.new(color.black, 70), text_color=color.white)
-
-// ==========================================
-// --- PANEL INFERIOR ---
-// ==========================================
-sq_max = ta.highest(math.abs(sqz_now), 100)
-sq_norm = (sq_max == 0 ? 0 : (sqz_now / sq_max) * 25) + 50
-sq_col = sqz_now > 0 ? (sq_up ? #00ff00 : #006400) : (ta.falling(sqz_now, 1) ? #ff0000 : #8b0000)
-
-plot(sq_norm, "Squeeze", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
-plot(rsi_v, "RSI", color=color.black)
-plot(adx_v, "ADX", color=color.purple, linewidth=2)
-hline(70, "OB", color=color.new(color.red, 50), linestyle=hline.style_dotted)
-hline(30, "OS", color=color.new(color.green, 50), linestyle=hline.style_dotted)
-
-// DIBUJOS EN PRECIO
-plot(show_bb ? bb_upper : na, "BB Upper", color=col_bb, force_overlay=true)
-plot(show_bb ? bb_lower : na, "BB Lower", color=col_bb, force_overlay=true)
-plot(show_ema ? ema_v : na, "EMA 50", color=col_ema, linewidth=2, force_overlay=true)
+    if barstate.islast
+        h_col = color.new(color.gray, 20)
+        t_col = color.white
+        
+        // CORRECCIÓN: No usar arrays en Pine Script V6
+        // Encabezados individuales
+        table.cell(mtf_table, 0, 0, "TF", 
+              bgcolor=h_col, 
+              text_color=t_col,
+              text_size=size.small)
+        table.cell(mtf_table, 1, 0, "RSI", 
+              bgcolor=h_col, 
+              text_color=t_col,
+              text_size=size.small)
+        table.cell(mtf_table, 2, 0, "ADX", 
+              bgcolor=h_col, 
+              text_color=t_col,
+              text_size=size.small)
+        table.cell(mtf_table, 3, 0, "Dist. EMA", 
+              bgcolor=h_col, 
+              text_color=t_col,
+              text_size=size.small)
+        table.cell(mtf_table, 4, 0, "SQUEEZE", 
+              bgcolor=h_col, 
+              text_color=t_col,
+              text_size=size.small)
+        
+        // MEJORA: Relleno de filas con filtro de volatilidad
+        f_table_row(mtf_table, 1, "1H", rsi_1h, adx_1h, dist_1h, sqz_1h, vol_1h)
+        f_table_row(mtf_table, 2, "4H", rsi_4h, adx_4h, dist_4h, sqz_4h, vol_4h)
+        f_table_row(mtf_table, 3, "1D", rsi_1d, adx_1d, dist_1d, sqz_1d, vol_1d)
