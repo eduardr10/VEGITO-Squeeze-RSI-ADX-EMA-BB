@@ -1,16 +1,29 @@
 //@version=6
-indicator("VEGITO [Optimized+Precision]", shorttitle="VEGITO+", overlay=false, precision=2)
+indicator("VEGITO [Full-Precision + Matrix Control] V16", shorttitle="VEGITO+ MAX", overlay=false, precision=2)
 
 // ==========================================
-// 1. CONFIGURACIÓN VISUAL (OPTIMIZADA)
+// 1. CONFIGURACIÓN VISUAL Y DE ENTRADAS
 // ==========================================
 gp_style_bb  = "🎨 Estilo: Bandas Bollinger"
 show_bb      = input.bool(true, "Mostrar BB (Precio)", group=gp_style_bb)
 col_bb       = input.color(color.new(#606060, 40), "Color Bandas", group=gp_style_bb)
+bb_width     = input.int(1, "Grosor Bandas", minval=1, maxval=5, group=gp_style_bb)
 
-gp_style_ema = "🎨 Estilo: EMA 50"
-show_ema     = input.bool(true, "Mostrar EMA (Precio)", group=gp_style_ema)
-col_ema      = input.color(#FFD700, "Color EMA", group=gp_style_ema) 
+gp_style_ema = "🎨 Estilo: MA Principal (MA1)"
+show_ema     = input.bool(true, "Mostrar MA1 (Precio)", group=gp_style_ema)
+col_ema      = input.color(#FFD700, "Color MA1", group=gp_style_ema) 
+ma1_length   = input.int(50, "Longitud MA1", minval=1, group=gp_style_ema)
+ma1_type     = input.string("EMA", "Tipo MA1", options=["EMA", "SMA"], group=gp_style_ema)
+ma1_source   = input.string("Close", "Fuente MA1", options=["Close", "Open"], group=gp_style_ema)
+ma1_width    = input.int(2, "Grosor MA1", minval=1, maxval=5, group=gp_style_ema)
+
+gp_style_ma2 = "🎨 Estilo: MA Secundaria (MA2)"
+show_ma2     = input.bool(false, "Mostrar MA2 (Precio)", group=gp_style_ma2)
+ma2_length   = input.int(200, "Longitud MA2", minval=1, group=gp_style_ma2)
+ma2_type     = input.string("SMA", "Tipo MA2", options=["EMA", "SMA"], group=gp_style_ma2)
+ma2_source   = input.string("Close", "Fuente MA2", options=["Close", "Open"], group=gp_style_ma2)
+ma2_color    = input.color(color.new(#00FFFF, 0), "Color MA2", group=gp_style_ma2)
+ma2_width    = input.int(2, "Grosor MA2", minval=1, maxval=5, group=gp_style_ma2)
 
 gp_panel     = "🖥️ Panel de Confluencia (MTF)"
 show_panel   = input.bool(true, "Mostrar Panel en Precio", group=gp_panel)
@@ -18,229 +31,127 @@ pos_panel    = input.string("Top Right", "Posición", options=["Top Right", "Bot
 
 gp_tooltip   = "📊 Configuración Tooltip"
 tooltip_freq = input.int(50, "Frecuencia de Ojos Históricos", minval=10, group=gp_tooltip)
+show_labels  = input.bool(true, "Mostrar Labels/Tooltip", group=gp_tooltip)
 
-// NUEVO: Filtro de volatilidad para mayor precisión
 gp_precision = "🎯 Precisión Mejorada"
 use_vol_filter = input.bool(true, "Usar Filtro de Volatilidad", group=gp_precision)
-vol_period = input.int(20, "Periodo Volatilidad", minval=10, maxval=50, group=gp_precision)
-vol_threshold = input.float(1.5, "Umbral Volatilidad (%)", minval=0.5, maxval=5, step=0.1, group=gp_precision)
+vol_threshold  = input.float(1.5, "Umbral Volatilidad (%)", minval=0.5, maxval=5, step=0.1, group=gp_precision)
+
+gp_style_squeeze = "🎨 Estilo: Squeeze"
+show_squeeze     = input.bool(true, "Mostrar Squeeze", group=gp_style_squeeze)
+squeeze_ma_width = input.int(1, "Grosor Squeeze MA", minval=1, maxval=3, group=gp_style_squeeze)
+
+gp_style_rsi = "🎨 Estilo: RSI"
+show_rsi         = input.bool(true, "Mostrar RSI", group=gp_style_rsi)
+rsi_color        = input.color(color.black, "Color RSI", group=gp_style_rsi)
+rsi_width        = input.int(1, "Grosor RSI", minval=1, maxval=3, group=gp_style_rsi)
+show_rsi_signal  = input.bool(true, "Mostrar Señal RSI", group=gp_style_rsi)
+rsi_signal_color = input.color(color.new(color.gray, 70), "Color Señal RSI", group=gp_style_rsi)
+rsi_signal_width = input.int(1, "Grosor Señal RSI", minval=1, maxval=3, group=gp_style_rsi)
+
+gp_style_adx = "🎨 Estilo: ADX"
+show_adx     = input.bool(true, "Mostrar ADX", group=gp_style_adx)
+adx_color    = input.color(color.purple, "Color ADX", group=gp_style_adx)
+adx_width    = input.int(2, "Grosor ADX", minval=1, maxval=4, group=gp_style_adx)
 
 // ==========================================
-// 2. FUNCIONES DE CÁLCULO (OPTIMIZADAS CON PRECISIÓN)
+// 2. MOTOR DE CÁLCULO
 // ==========================================
-// MEJORA: Función única para cálculo más preciso
 f_calc_metrics() =>
-    // Definiciones optimizadas
-    _c = close
-    _h = high
-    _l = low
+    _c = close, _h = high, _low_val = low 
+    _src1 = ma1_source == "Open" ? open : close
+    _src2 = ma2_source == "Open" ? open : close
     
-    // 1. Indicadores básicos (optimizados)
-    _ema = ta.ema(_c, 50)
-    _dist = (_ema != 0 ? ((_c - _ema) / math.abs(_ema)) * 100 : 0)  // MEJORA: Evita división por 0
-    
-    // MEJORA: RSI con suavizado adicional para mayor precisión
-    _rsi_raw = ta.rsi(_c, 14)
-    _rsi = (_rsi_raw + ta.rsi(_c, 10)) / 2  // Promedio para reducir falsos
-    
-    // MEJORA: ADX con filtro de ruido
+    _m1 = ma1_type == "EMA" ? ta.ema(_src1, ma1_length) : ta.sma(_src1, ma1_length)
+    _m2 = ma2_type == "EMA" ? ta.ema(_src2, ma2_length) : ta.sma(_src2, ma2_length)
+    _dist = (_m1 != 0 ? ((_c - _m1) / math.abs(_m1)) * 100 : 0)
+    _rsi = (ta.rsi(_c, 14) + ta.rsi(_c, 10)) / 2
     [_, _, _adx_raw] = ta.dmi(14, 14)
-    _adx = ta.sma(_adx_raw, 3)  // Suavizado para mayor precisión
+    _adx = ta.sma(_adx_raw, 3)
+    [_mid, _u, _l_band] = ta.bb(_c, 20, 2.0)
     
-    // Bandas Bollinger
-    [_bb_mid, _bb_u, _bb_l] = ta.bb(_c, 20, 2.0)
-    
-    // 2. Squeeze (EXACTA tu fórmula - no modificada)
-    _h20 = ta.highest(_h, 20)
-    _l20 = ta.lowest(_l, 20)
-    _a20 = ta.sma(_c, 20)
-    _avg = (math.avg(_h20, _l20) + _a20) / 2
+    _avg = (math.avg(ta.highest(_h, 20), ta.lowest(_low_val, 20)) + ta.sma(_c, 20)) / 2
     _sqz = ta.linreg(_c - _avg, 20, 0)
+    _vol = (ta.atr(14) / _c) * 100 > vol_threshold
     
-    // NUEVO: Cálculo de volatilidad para filtro de precisión
-    _atr = ta.atr(14)
-    _atr_percent = (_c != 0 ? (_atr / _c) * 100 : 0)
-    _vol_high = _atr_percent > vol_threshold
-    
-    // Retornamos todo el paquete de datos
-    [_rsi, _adx, _dist, _sqz, _ema, _bb_u, _bb_l, _vol_high]
+    [_rsi, _adx, _dist, _sqz, _m1, _m2, _u, _l_band, _vol]
 
-// Función para dibujar filas en la tabla (Optimizada)
-f_table_row(_tbl, _row, _tf, _r, _a, _d, _s, _vol_filter) =>
-    c_bg = color.new(color.black, 70)
-    c_tx = color.white
-    
-    // MEJORA: Color de fondo basado en volatilidad
-    bg_color = _vol_filter and use_vol_filter ? color.new(color.orange, 30) : c_bg
-    
-    // TF
-    table.cell(_tbl, 0, _row, _tf, bgcolor=bg_color, text_color=c_tx)
-    
-    // RSI con mayor precisión visual
-    c_rsi = _r > 70 ? color.new(color.red, 40) : _r < 30 ? color.new(color.green, 40) : bg_color
-    rsi_text = str.tostring(_r, "#.0")  // MEJORA: Un decimal para mayor precisión
-    table.cell(_tbl, 1, _row, rsi_text, bgcolor=c_rsi, text_color=c_tx)
-    
-    // ADX con indicador visual mejorado
-    c_adx = _a > 25 ? color.new(color.purple, 60) : bg_color
-    adx_text = str.tostring(_a, "#.0")  // MEJORA: Un decimal
-    table.cell(_tbl, 2, _row, adx_text, bgcolor=c_adx, text_color=c_tx)
-    
-    // Distancia con color basado en magnitud
-    d_sign = _d > 0 ? "+" : ""
-    d_color = math.abs(_d) > 2 ? color.new(_d > 0 ? color.green : color.red, 20) : bg_color
-    dist_text = d_sign + str.tostring(_d, "#.##") + "%"
-    table.cell(_tbl, 3, _row, dist_text, bgcolor=d_color, text_color=c_tx)
-    
-    // Squeeze (visual original preservado)
-    sym_s = _s > 0 ? "🟢" : "🔴"
-    table.cell(_tbl, 4, _row, sym_s, bgcolor=bg_color, text_color=c_tx)
+// Ejecución Local
+[rsi_v, adx_v, dist_v, sqz_v, ma1_v, ma2_v, bb_u, bb_l_band, vol_v] = f_calc_metrics()
+
+// Obtención MTF
+[r1h, a1h, d1h, s1h, v1h] = request.security(syminfo.tickerid, "60", [rsi_v, adx_v, dist_v, sqz_v, vol_v])
+[r4h, a4h, d4h, s4h, v4h] = request.security(syminfo.tickerid, "240", [rsi_v, adx_v, dist_v, sqz_v, vol_v])
+[r1d, a1d, d1d, s1d, v1d] = request.security(syminfo.tickerid, "D", [rsi_v, adx_v, dist_v, sqz_v, vol_v])
 
 // ==========================================
-// 3. OBTENCIÓN DE DATOS (OPTIMIZADA)
+// 3. RENDERIZADO PANEL INFERIOR
 // ==========================================
-// Datos Actuales
-[rsi_v, adx_v, dist_v, sqz_now, ema_v, bb_upper, bb_lower, vol_high] = f_calc_metrics()
+sq_is_rising  = ta.rising(sqz_v, 1)
+sq_is_falling = ta.falling(sqz_v, 1)
+sq_max = ta.highest(math.abs(sqz_v), 100)
+sq_norm = (sq_max == 0 ? 0 : (sqz_v / sq_max) * 25) + 50
+sq_col = sqz_v > 0 ? (sq_is_rising ? #00ff00 : #006400) : (sq_is_falling ? #ff0000 : #8b0000)
 
-// MEJORA: Cálculo MTF optimizado
-get_mtf_data(tf) =>
-    [r, a, d, s, e, bu, bl, v] = request.security(syminfo.tickerid, tf, f_calc_metrics())
-    [r, a, d, s, v]
-
-// Datos MTF (optimizado)
-[rsi_1h, adx_1h, dist_1h, sqz_1h, vol_1h] = get_mtf_data("60")
-[rsi_4h, adx_4h, dist_4h, sqz_4h, vol_4h] = get_mtf_data("240")
-[rsi_1d, adx_1d, dist_1d, sqz_1d, vol_1d] = get_mtf_data("D")
-
-// ==========================================
-// 4. VISUALIZACIÓN PANEL INFERIOR (MEJORADA)
-// ==========================================
-// Squeeze Visual (CORRECCIÓN: Extraer ta.falling fuera del operador ternario)
-sq_up = ta.rising(sqz_now, 1)
-sq_down = ta.falling(sqz_now, 1)  // Extraído aquí para consistencia
-
-sq_max = ta.highest(math.abs(sqz_now), 100)
-sq_norm = (sq_max == 0 ? 0 : (sqz_now / sq_max) * 25) + 50
-
-// CORRECCIÓN: Usar variable precalculada sq_down
-sq_col = sqz_now > 0 ? (sq_up ? #00ff00 : #006400) : (sq_down ? #ff0000 : #8b0000)
-
-// MEJORA: Añadir línea de tendencia al squeeze
-plot(sq_norm, "Squeeze", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
-plot(ta.sma(sq_norm, 5), "Squeeze MA", color=color.new(sq_col, 70), linewidth=1)
-
-// RSI con línea de señal mejorada
-rsi_signal = ta.sma(rsi_v, 3)
-plot(rsi_v, "RSI", color=color.black)
-plot(rsi_signal, "RSI Signal", color=color.new(color.gray, 70), linewidth=1)
-
-// ADX con visualización mejorada
-plot(adx_v, "ADX", color=color.purple, linewidth=2)
-hline(25, "ADX Threshold", color=color.new(color.purple, 30), linestyle=hline.style_dotted)
-
-// Líneas de referencia
-hline(70, "OB", color=color.new(color.red, 50), linestyle=hline.style_dotted)
-hline(30, "OS", color=color.new(color.green, 50), linestyle=hline.style_dotted)
+plot(show_squeeze ? sq_norm : na, "Squeeze", color=color.new(sq_col, 40), style=plot.style_area, histbase=50)
+plot(show_squeeze ? ta.sma(sq_norm, 5) : na, "Squeeze MA", color=color.new(sq_col, 70), linewidth=squeeze_ma_width)
+plot(show_rsi ? rsi_v : na, "RSI", color=rsi_color, linewidth=rsi_width)
+plot(show_rsi and show_rsi_signal ? ta.sma(rsi_v, 3) : na, "RSI Signal", color=rsi_signal_color, linewidth=rsi_signal_width)
+plot(show_adx ? adx_v : na, "ADX", color=adx_color, linewidth=adx_width)
 
 // ==========================================
-// 5. VISUALIZACIÓN OVERLAY (CON FILTRO VOL)
+// 4. OVERLAY EN PRECIO Y TOOLTIPS (CORREGIDO)
 // ==========================================
-// MEJORA: Transparencia basada en volatilidad
-bb_alpha = use_vol_filter and vol_high ? 20 : 40
-ema_alpha = use_vol_filter and vol_high ? 40 : 80
+plot(show_bb ? bb_u : na, "BB Upper", color=color.new(col_bb, vol_v ? 20 : 40), linewidth=bb_width, force_overlay=true)
+plot(show_bb ? bb_l_band : na, "BB Lower", color=color.new(col_bb, vol_v ? 20 : 40), linewidth=bb_width, force_overlay=true)
+plot(show_ema ? ma1_v : na, "MA1", color=color.new(col_ema, vol_v ? 40 : 80), linewidth=ma1_width, force_overlay=true)
+plot(show_ma2 ? ma2_v : na, "MA2", color=ma2_color, linewidth=ma2_width, force_overlay=true)
 
-plot(show_bb ? bb_upper : na, "BB Upper", color=color.new(col_bb, bb_alpha), force_overlay=true)
-plot(show_bb ? bb_lower : na, "BB Lower", color=color.new(col_bb, bb_alpha), force_overlay=true)
-plot(show_ema ? ema_v : na, "EMA 50", color=color.new(col_ema, ema_alpha), linewidth=2, force_overlay=true)
+// Lógica de Labels para evitar el error de acumulación
+var label last_diagnostic_label = na
 
-// ==========================================
-// 6. ETIQUETAS MEJORADAS (CON FILTRO VOL)
-// ==========================================
-var label last_label = na
-if barstate.islast and not na(last_label)
-    label.delete(last_label)
-
-is_step_bar = bar_index % tooltip_freq == 0
-
-if is_step_bar or barstate.islast
-    // MEJORA: Información más detallada
-    estructura = close > ema_v ? "ALCISTA" : "BAJISTA"
-    fuerza_adx = adx_v > 25 ? "FUERTE" : "DÉBIL"
-    squeeze_dir = sqz_now > 0 ? "Momentum 🟢" : "Momentum 🔴"
-    vol_status = vol_high ? "ALTA VOL" : "VOL NORMAL"
+if show_labels
+    is_step = bar_index % tooltip_freq == 0
     
-    // CORRECCIÓN: Eliminar string.repeat() que no existe en Pine Script
-    txt = "🎯 DIAGNÓSTICO VEGITO+\n═════════════════════════\n"
-    txt += "ESTRUCTURA: " + estructura + "\n"
-    txt += "FUERZA ADX: " + fuerza_adx + " (" + str.tostring(adx_v, "#.0") + ")\n"
-    txt += "SQUEEZE: " + squeeze_dir + "\n"
-    txt += "VOLATILIDAD: " + vol_status + "\n"
-    txt += "═════════════════════════\n"
-    txt += "SITUACIÓN 1D:\n"
-    txt += "• RSI: " + str.tostring(rsi_1d, "#.0") + "\n"
-    txt += "• Dist EMA: " + str.tostring(dist_1d, "#.##") + "%\n"
-    txt += "• ADX: " + str.tostring(adx_1d, "#.0")
-    
-    lbl_color = vol_high and use_vol_filter ? color.new(#FF6B00, 40) : color.new(#2196F3, 20)
-    
-    lbl = label.new(bar_index, high, vol_high ? "⚡" : "👁️", 
-          yloc=yloc.abovebar, 
-          color=lbl_color, 
-          style=label.style_label_down, 
-          size=size.small, 
-          force_overlay=true, 
-          tooltip=txt)
-    
-    if barstate.islast
-        last_label := lbl
-
-// ==========================================
-// 7. TABLA MTF MEJORADA (CON VOLATILIDAD)
-// ==========================================
-// Mapeo de posición
-var pos_tbl = position.top_right
-if pos_panel == "Top Left"
-    pos_tbl := position.top_left
-else if pos_panel == "Bottom Right"
-    pos_tbl := position.bottom_right
-else if pos_panel == "Bottom Left"
-    pos_tbl := position.bottom_left
-
-if show_panel
-    var table mtf_table = table.new(pos_tbl, 5, 4, 
-          border_width=1, 
-          frame_color=color.gray, 
-          border_color=color.gray,
-          force_overlay=true)
-    
-    if barstate.islast
-        h_col = color.new(color.gray, 20)
-        t_col = color.white
+    if is_step or barstate.islast
+        // Si es la última vela, borramos la anterior "flotante" para que no se acumulen
+        if barstate.islast
+            label.delete(last_diagnostic_label)
+            
+        txt = "🎯 DIAGNÓSTICO VEGITO+\nESTRUCTURA: " + (close > ma1_v ? "ALCISTA" : "BAJISTA") + "\nSQUEEZE: " + (sqz_v > 0 ? "🟢" : "🔴") + "\nVOL: " + (vol_v ? "ALTA" : "NORMAL") + "\n\nSITUACIÓN 1D:\n• RSI: " + str.tostring(r1d, "#.0") + "\n• ADX: " + str.tostring(a1d, "#.0")
         
-        // CORRECCIÓN: No usar arrays en Pine Script V6
-        // Encabezados individuales
-        table.cell(mtf_table, 0, 0, "TF", 
-              bgcolor=h_col, 
-              text_color=t_col,
-              text_size=size.small)
-        table.cell(mtf_table, 1, 0, "RSI", 
-              bgcolor=h_col, 
-              text_color=t_col,
-              text_size=size.small)
-        table.cell(mtf_table, 2, 0, "ADX", 
-              bgcolor=h_col, 
-              text_color=t_col,
-              text_size=size.small)
-        table.cell(mtf_table, 3, 0, "Dist. EMA", 
-              bgcolor=h_col, 
-              text_color=t_col,
-              text_size=size.small)
-        table.cell(mtf_table, 4, 0, "SQUEEZE", 
-              bgcolor=h_col, 
-              text_color=t_col,
-              text_size=size.small)
+        new_lbl = label.new(bar_index, high, vol_v ? "⚡" : "👁️", 
+                  yloc=yloc.abovebar, 
+                  color=color.new(color.blue, 40), 
+                  style=label.style_label_down, 
+                  size=size.small, 
+                  force_overlay=true, 
+                  tooltip=txt)
         
-        // MEJORA: Relleno de filas con filtro de volatilidad
-        f_table_row(mtf_table, 1, "1H", rsi_1h, adx_1h, dist_1h, sqz_1h, vol_1h)
-        f_table_row(mtf_table, 2, "4H", rsi_4h, adx_4h, dist_4h, sqz_4h, vol_4h)
-        f_table_row(mtf_table, 3, "1D", rsi_1d, adx_1d, dist_1d, sqz_1d, vol_1d)
+        // Guardamos la referencia si es la última para poder borrarla en el siguiente tick
+        if barstate.islast
+            last_diagnostic_label := new_lbl
+
+// ==========================================
+// 5. TABLA MTF INTEGRAL
+// ==========================================
+f_table_row(_tbl, _row, _tf, _r, _a, _d, _s, _v) =>
+    bg = _v and use_vol_filter ? color.new(color.orange, 30) : color.new(color.black, 70)
+    table.cell(_tbl, 0, _row, _tf, bgcolor=bg, text_color=color.white)
+    table.cell(_tbl, 1, _row, str.tostring(_r, "#.0"), bgcolor=_r > 70 ? color.red : _r < 30 ? color.green : bg, text_color=color.white)
+    table.cell(_tbl, 2, _row, str.tostring(_a, "#.0"), bgcolor=_a > 25 ? color.purple : bg, text_color=color.white)
+    table.cell(_tbl, 3, _row, str.tostring(_d, "#.##") + "%", text_color=color.white, bgcolor=bg)
+    table.cell(_tbl, 4, _row, _s > 0 ? "🟢" : "🔴", bgcolor=bg)
+
+if show_panel and barstate.islast
+    t_pos = pos_panel == "Top Right" ? position.top_right : pos_panel == "Bottom Right" ? position.bottom_right : pos_panel == "Top Left" ? position.top_left : position.bottom_left
+    var table mtf = table.new(t_pos, 5, 4, border_width=1, frame_color=color.gray, force_overlay=true)
+    table.cell(mtf, 0, 0, "TF", bgcolor=color.gray, text_color=color.white)
+    table.cell(mtf, 1, 0, "RSI", bgcolor=color.gray, text_color=color.white)
+    table.cell(mtf, 2, 0, "ADX", bgcolor=color.gray, text_color=color.white)
+    table.cell(mtf, 3, 0, "Dist.", bgcolor=color.gray, text_color=color.white)
+    table.cell(mtf, 4, 0, "SQZ", bgcolor=color.gray, text_color=color.white)
+    
+    f_table_row(mtf, 1, "1H", r1h, a1h, d1h, s1h, v1h)
+    f_table_row(mtf, 2, "4H", r4h, a4h, d4h, s4h, v4h)
+    f_table_row(mtf, 3, "1D", r1d, a1d, d1d, s1d, v1d)
