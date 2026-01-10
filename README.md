@@ -26,14 +26,6 @@ La característica más innovadora de **VEGITO** es su etiqueta de resumen intel
 
 ---
 
-## ⚙️ Modos de Sensibilidad
-
-El indicador permite conmutar la reactividad de sus algoritmos:
-* **Modo Estándar:** Configuración equilibrada para Swing Trading (RSI 14 / ADX 20).
-* **Modo Sensible:** Configuración reactiva diseñada para Scalping y Day Trading (RSI 7 / ADX 14).
-
----
-
 ## 🚀 Instrucciones de Instalación
 
 Como este script no está publicado en la biblioteca pública de TradingView, sigue estos pasos para usarlo:
